@@ -11,6 +11,7 @@ func RunContainerInitProcess(command string, args []string) error {
 	logrus.Infof("Command %s", command)
 
 	defaultMountFlags := syscall.MS_NOEXEC | syscall.MS_NOSUID | syscall.MS_NODEV
+	syscall.Mount("", "/", "", uintptr(syscall.MS_PRIVATE|syscall.MS_REC|defaultMountFlags), "")
 	syscall.Mount("proc", "/proc", "proc", uintptr(defaultMountFlags), "")
 	argv := []string{command}
 	if err := syscall.Exec(command, argv, os.Environ()); err != nil {

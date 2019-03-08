@@ -15,6 +15,7 @@ func main() {
 	app.Usage = usage
 	app.Commands = []cli.Command{
 		initCommand,
+		runCommand,
 	}
 
 	app.Before = func(ctx *cli.Context) error {
