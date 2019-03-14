@@ -1,6 +1,7 @@
 package container
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -9,7 +10,25 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
+var (
+	RUNNING             string = "running"
+	STOP                string = "stoped"
+	EXIT                string = "exited"
+	InformationLocation string = "/var/run/myDocker/%s/"
+	ConfigName          string = "config.json"
+	LogFileName         string = "container.log"
+)
+
+type ContainerInfo struct {
+	Pid        string `json:"pid"`
+	Id         string `json:"id"`
+	Name       string `json:"name"`
+	Command    string `json:"command"`
+	CreateTime string `json:"createTime"`
+	Status     string `json:"status"`
+}
+
+func NewParentProcess(containerId string, tty bool, volume string) (*exec.Cmd, *os.File) {
 	readPipe, writePipe, err := NewPipe()
 	if err != nil {
 		logrus.Errorf("New pipe error %v", err)
@@ -19,19 +38,28 @@ func NewParentProcess(tty bool, volume string) (*exec.Cmd, *os.File) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNET | syscall.CLONE_NEWIPC,
 	}
-	if tty {
-		cmd.Stdin = os.Stdin
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-	}
+
 	cmd.ExtraFiles = []*os.File{readPipe}
 
-	mntURL := "/root/mnt/"
-	rootURL := "/root/"
+	mntURL := fmt.Sprintf("/var/run/myDocker/%s/rootfs/", containerId)
+	rootURL := fmt.Sprintf("/var/run/myDocker/%s/", containerId)
 
 	NewWorkspace(rootURL, mntURL, volume)
 
 	cmd.Dir = mntURL
+
+	if tty {
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	} else {
+		if file, err := os.Create(rootURL + LogFileName); err == nil {
+			cmd.Stdout = file
+		} else {
+			return nil, nil
+		}
+	}
+
 	return cmd, writePipe
 }
 
@@ -62,14 +90,14 @@ func NewWorkspace(rootURL string, mntURL string, volume string) {
 
 func CreateReadOnlyLayer(rootURL string) {
 	busyboxURL := rootURL + "busybox/"
-	busyboxTarURL := rootURL + "busybox.tar"
+	busyboxTarURL := "/root/busybox.tar"
 
 	exist, err := PathExists(busyboxURL)
 	if err != nil {
 		logrus.Infof("fail to judge whether dir %s exists: %v", busyboxURL, err)
 	}
 	if exist == false {
-		if err := os.Mkdir(busyboxURL, 0777); err != nil {
+		if err := os.MkdirAll(busyboxURL, 0777); err != nil {
 			logrus.Errorf("make dir %s error: %v", busyboxURL, err)
 		}
 		if _, err := exec.Command("tar", "-xvf", busyboxTarURL, "-C", busyboxURL).CombinedOutput(); err != nil {

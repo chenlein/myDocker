@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/chenlei/myDocker/cgroups/subsystems"
 	"github.com/chenlei/myDocker/container"
@@ -37,9 +38,13 @@ var runCommand = cli.Command{
 			Name:  "v",
 			Usage: "volume",
 		},
-		cli.StringFlag{
+		cli.BoolFlag{
 			Name:  "d",
 			Usage: "detach",
+		},
+		cli.StringFlag{
+			Name:  "name",
+			Usage: "container name",
 		},
 	},
 	Action: func(ctx *cli.Context) error {
@@ -60,7 +65,10 @@ var runCommand = cli.Command{
 			MemoryLimit: ctx.String("m"),
 		}
 		volume := ctx.String("v")
-		Run(tty, commandArray, resourceConfig, volume)
+
+		containerName := ctx.String("name")
+
+		Run(tty, commandArray, resourceConfig, volume, containerName)
 		return nil
 	},
 }
@@ -74,6 +82,49 @@ var commitCommand = cli.Command{
 		}
 		imageName := ctx.Args().Get(0)
 		CommitContainer(imageName)
+		return nil
+	},
+}
+
+var listCommand = cli.Command{
+	Name:  "ps",
+	Usage: "list container",
+	Action: func(ctx *cli.Context) error {
+		ListContainers()
+		return nil
+	},
+}
+
+var logsCommand = cli.Command{
+	Name:  "logs",
+	Usage: "show container logs",
+	Action: func(ctx *cli.Context) error {
+		if len(ctx.Args()) != 1 {
+			logrus.Errorf("missing container name")
+		}
+		showContainerLogs(ctx.Args().Get(0))
+		return nil
+	},
+}
+
+var execCommand = cli.Command{
+	Name:  "exec",
+	Usage: "execute a command into container",
+	Action: func(ctx *cli.Context) error {
+		if os.Getenv(ENV_EXEC_PID) != "" {
+			logrus.Infof("execute callback pid: %s", os.Getpid())
+			logrus.Infof("exec pid: %s", os.Getenv(ENV_EXEC_PID))
+			logrus.Infof("exec command: %s", os.Getenv(ENV_EXEC_CMD))
+			return nil
+		}
+		if len(ctx.Args()) < 2 {
+			return fmt.Errorf("missing ontainer name or command")
+		}
+		var commandArray []string
+		for _, arg := range ctx.Args().Tail() {
+			commandArray = append(commandArray, arg)
+		}
+		executeIntoContainer(ctx.Args().Get(0), commandArray)
 		return nil
 	},
 }
